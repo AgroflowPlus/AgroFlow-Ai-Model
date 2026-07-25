@@ -13,6 +13,17 @@ from chatbot.logger import logger
 
 
 # ============================================================
+# SETTINGS
+# ============================================================
+
+MAX_RERANK_DOCUMENTS = 5
+
+MIN_DOCUMENTS_TO_RERANK = 3
+
+BATCH_SIZE = 16
+
+
+# ============================================================
 # GLOBAL RERANKER
 # ============================================================
 
@@ -24,7 +35,6 @@ reranker = None
 # ============================================================
 
 def get_reranker():
-
     """
     Lazily load the CrossEncoder model.
     The model is loaded only once.
@@ -40,9 +50,7 @@ def get_reranker():
         )
 
         reranker = CrossEncoder(
-
             RERANKER_MODEL
-
         )
 
         logger.info(
@@ -57,13 +65,9 @@ def get_reranker():
 # ============================================================
 
 def rerank_documents(
-
     question,
-
     documents
-
 ):
-
     """
     Rerank retrieved documents using a CrossEncoder.
 
@@ -89,12 +93,32 @@ def rerank_documents(
 
         return []
 
-    model = get_reranker()
+    # --------------------------------------------------------
+    # Skip reranking if very few documents
+    # --------------------------------------------------------
+
+    if len(documents) <= MIN_DOCUMENTS_TO_RERANK:
+
+        logger.info(
+            "Skipping reranking (%d document(s) only).",
+            len(documents)
+        )
+
+        return documents
+
+    # --------------------------------------------------------
+    # Only rerank the top retrieved documents
+    # --------------------------------------------------------
+
+    documents_to_rerank = documents[:MAX_RERANK_DOCUMENTS]
 
     logger.info(
-        "Reranking %d retrieved document(s).",
+        "Reranking %d of %d retrieved document(s).",
+        len(documents_to_rerank),
         len(documents)
     )
+
+    model = get_reranker()
 
     # --------------------------------------------------------
     # Build Question-Document Pairs
@@ -110,7 +134,7 @@ def rerank_documents(
 
         )
 
-        for doc in documents
+        for doc in documents_to_rerank
 
     ]
 
@@ -120,7 +144,11 @@ def rerank_documents(
 
     scores = model.predict(
 
-        pairs
+        pairs,
+
+        batch_size=BATCH_SIZE,
+
+        show_progress_bar=False
 
     )
 
@@ -130,7 +158,7 @@ def rerank_documents(
 
     for doc, score in zip(
 
-        documents,
+        documents_to_rerank,
 
         scores
 
@@ -139,10 +167,10 @@ def rerank_documents(
         doc["rerank_score"] = float(score)
 
     # --------------------------------------------------------
-    # Sort by Score
+    # Sort reranked documents
     # --------------------------------------------------------
 
-    documents.sort(
+    documents_to_rerank.sort(
 
         key=lambda x: x["rerank_score"],
 
@@ -150,21 +178,29 @@ def rerank_documents(
 
     )
 
+    # --------------------------------------------------------
+    # Keep the remaining documents
+    # --------------------------------------------------------
+
+    final_documents = documents_to_rerank + documents[MAX_RERANK_DOCUMENTS:]
+
     logger.info(
 
         "Best reranker score: %.3f",
 
-        documents[0]["rerank_score"]
+        documents_to_rerank[0]["rerank_score"]
 
     )
 
     logger.debug(
+
         "Top reranked documents:"
+
     )
 
     for index, doc in enumerate(
 
-        documents,
+        documents_to_rerank,
 
         start=1
 
@@ -182,4 +218,4 @@ def rerank_documents(
 
         )
 
-    return documents
+    return final_documents
