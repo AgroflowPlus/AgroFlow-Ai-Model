@@ -4,7 +4,7 @@ RRF_SCORE_THRESHOLD = 0.08
 MAX_HISTORY = 10
 
 TOP_CONTEXT_CHUNKS = 4
-RERANKER_MODEL = "BAAI/bge-reranker-base"
+RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L6-v2"
 
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
